@@ -107,6 +107,9 @@ class MonodepthOptions:
                                  type=int,
                                  help="step size of the scheduler",
                                  default=15)
+        self.parser.add_argument("--load_pt_folder",
+                                 type=str,
+                                 help="path to pretrained model")
 
         # ABLATION options
         self.parser.add_argument("--v1_multiscale",
