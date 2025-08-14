@@ -236,9 +236,9 @@ class Trainer:
             if should_log and self.step % 10 == 0:
               #wandb.log({f"Train/reprojection_loss": losses["loss"].item()}, step=self.step)
               wandb.log({
-                    "Train/reprojection_loss": losses["loss"].item(),
-                    "Train/smoothness_loss": losses["reproj_loss"].item(),  
-                    "Train/total_loss": losses["smooth_loss"].item()
+                    "Train/total_loss": losses["loss"].item(),
+                    "Train/reprojection_loss": losses["reproj_loss"].item(),  
+                    "Train/smoothness_loss": losses["smooth_loss"].item()
                 }, step=self.step)
 
             # log less frequently after the first 2000 steps to save time & disk space
@@ -503,6 +503,9 @@ class Trainer:
                 reprojection_loss = reprojection_losses.mean(1, keepdim=True)
             else:
                 reprojection_loss = reprojection_losses
+            
+            #Save raw reprojection loss (mean over batch)
+            losses["reproj_loss"] = reprojection_loss.mean()
 
             if not self.opt.disable_automasking:
                 # add random numbers to break ties
@@ -524,10 +527,15 @@ class Trainer:
                     idxs > identity_reprojection_loss.shape[1] - 1).float()
 
             loss += to_optimise.mean()
-
+            if color.shape[-2:] != disp.shape[-2:]:
+                disp = F.interpolate(disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
             mean_disp = disp.mean(2, True).mean(3, True)
             norm_disp = disp / (mean_disp + 1e-7)
+
             smooth_loss = get_smooth_loss(norm_disp, color)
+
+            # Save smoothness loss per scale
+            losses["smooth_loss"] = self.opt.disparity_smoothness * smooth_loss / (2 ** scale)
 
             loss += self.opt.disparity_smoothness * smooth_loss / (2 ** scale)
             total_loss += loss

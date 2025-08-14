@@ -162,7 +162,7 @@ class MonodepthOptions:
                                  type=str,
                                  help="models to load",
                                  #default=["encoder", "depth", "pose_encoder", "pose"])
-                                 default=["encoder", "depth", "pose"])
+                                 default=["encoder", "depth", "pose_encoder", "pose"])
 
         # LOGGING options
         self.parser.add_argument('--ext', type=str,
