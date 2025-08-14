@@ -8,12 +8,16 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import time
+#Added from the SPIdepth
+import uuid
+from datetime import datetime as dt
 
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 
 import json
 
@@ -23,7 +27,14 @@ from layers import *
 
 import datasets
 import networks
-from IPython import embed
+#from IPython import embed
+import wandb #To log in wandb
+from collections import OrderedDict
+
+
+PROJECT = "Monodepth_Midair_full"
+experiment_name="resnet18lite"
+
 
 
 class Trainer:
@@ -32,8 +43,8 @@ class Trainer:
         self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
 
         # checking height and width are multiples of 32
-        assert self.opt.height % 32 == 0, "'height' must be a multiple of 32"
-        assert self.opt.width % 32 == 0, "'width' must be a multiple of 32"
+        #assert self.opt.height % 32 == 0, "'height' must be a multiple of 32"
+        #assert self.opt.width % 32 == 0, "'width' must be a multiple of 32"
 
         self.models = {}
         self.parameters_to_train = []
@@ -80,24 +91,24 @@ class Trainer:
                 self.models["pose"] = networks.PoseDecoder(
                     self.models["encoder"].num_ch_enc, self.num_pose_frames)
 
-            elif self.opt.pose_model_type == "posecnn":
+            elif self.opt.pose_model_type == "posecnn": #USED BY SPIDEPTH
                 self.models["pose"] = networks.PoseCNN(
                     self.num_input_frames if self.opt.pose_model_input == "all" else 2)
 
             self.models["pose"].to(self.device)
             self.parameters_to_train += list(self.models["pose"].parameters())
 
-        if self.opt.predictive_mask:
-            assert self.opt.disable_automasking, \
-                "When using predictive_mask, please disable automasking with --disable_automasking"
+        #if self.opt.predictive_mask:
+        #    assert self.opt.disable_automasking, \
+        #        "When using predictive_mask, please disable automasking with --disable_automasking"
 
-            # Our implementation of the predictive masking baseline has the the same architecture
-            # as our depth decoder. We predict a separate mask for each source frame.
-            self.models["predictive_mask"] = networks.DepthDecoder(
-                self.models["encoder"].num_ch_enc, self.opt.scales,
-                num_output_channels=(len(self.opt.frame_ids) - 1))
-            self.models["predictive_mask"].to(self.device)
-            self.parameters_to_train += list(self.models["predictive_mask"].parameters())
+        #    # Our implementation of the predictive masking baseline has the the same architecture
+        #    # as our depth decoder. We predict a separate mask for each source frame.
+        #    self.models["predictive_mask"] = networks.DepthDecoder(
+        #        self.models["encoder"].num_ch_enc, self.opt.scales,
+        #        num_output_channels=(len(self.opt.frame_ids) - 1))
+        #    self.models["predictive_mask"].to(self.device)
+        #    self.parameters_to_train += list(self.models["predictive_mask"].parameters())
 
         self.model_optimizer = optim.Adam(self.parameters_to_train, self.opt.learning_rate)
         self.model_lr_scheduler = optim.lr_scheduler.StepLR(
@@ -112,7 +123,8 @@ class Trainer:
 
         # data
         datasets_dict = {"kitti": datasets.KITTIRAWDataset,
-                         "kitti_odom": datasets.KITTIOdomDataset}
+                         "kitti_odom": datasets.KITTIOdomDataset,
+                         "midair": datasets.MidAirDataset}
         self.dataset = datasets_dict[self.opt.dataset]
 
         fpath = os.path.join(os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
@@ -126,13 +138,13 @@ class Trainer:
 
         train_dataset = self.dataset(
             self.opt.data_path, train_filenames, self.opt.height, self.opt.width,
-            self.opt.frame_ids, 4, is_train=True, img_ext=img_ext)
+            self.opt.frame_ids, 1, is_train=True, img_ext=img_ext) #4
         self.train_loader = DataLoader(
             train_dataset, self.opt.batch_size, True,
             num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
         val_dataset = self.dataset(
             self.opt.data_path, val_filenames, self.opt.height, self.opt.width,
-            self.opt.frame_ids, 4, is_train=False, img_ext=img_ext)
+            self.opt.frame_ids, 1, is_train=False, img_ext=img_ext) #4
         self.val_loader = DataLoader(
             val_dataset, self.opt.batch_size, True,
             num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
@@ -185,15 +197,24 @@ class Trainer:
         self.epoch = 0
         self.step = 0
         self.start_time = time.time()
+
+        run_id = f"{dt.now().strftime('%d-%h_%H-%M')}-nodebs{self.opt.batch_size}-tep{self.opt.num_epochs}-lr{self.opt.learning_rate}--{uuid.uuid4()}"
+        name = f"{experiment_name}_{run_id}"
+        #wandb.init(project=PROJECT, name=name, config=self.opt, dir='.')
+        wandb.init(project=PROJECT, name=name, config=self.opt, dir=self.opt.log_dir)
+
+        self.save_model()
         for self.epoch in range(self.opt.num_epochs):
+            wandb.log({"Epoch": self.epoch}, step=self.step) #Added to log in wandb
             self.run_epoch()
             if (self.epoch + 1) % self.opt.save_frequency == 0:
                 self.save_model()
+            self.save_model()
 
     def run_epoch(self):
         """Run a single epoch of training and validation
         """
-        self.model_lr_scheduler.step()
+        #self.model_lr_scheduler.step()
 
         print("Training")
         self.set_train()
@@ -210,9 +231,19 @@ class Trainer:
 
             duration = time.time() - before_op_time
 
+            #Wandb loging
+            should_log = True
+            if should_log and self.step % 10 == 0:
+              #wandb.log({f"Train/reprojection_loss": losses["loss"].item()}, step=self.step)
+              wandb.log({
+                    "Train/reprojection_loss": losses["loss"].item(),
+                    "Train/smoothness_loss": losses["reproj_loss"].item(),  
+                    "Train/total_loss": losses["smooth_loss"].item()
+                }, step=self.step)
+
             # log less frequently after the first 2000 steps to save time & disk space
             early_phase = batch_idx % self.opt.log_frequency == 0 and self.step < 2000
-            late_phase = self.step % 2000 == 0
+            late_phase = self.step % 1000 == 0
 
             if early_phase or late_phase:
                 self.log_time(batch_idx, duration, losses["loss"].cpu().data)
@@ -322,10 +353,12 @@ class Trainer:
         """
         self.set_eval()
         try:
-            inputs = self.val_iter.next()
+            #inputs = self.val_iter.next()
+            inputs = next(self.val_iter) # for new pytorch
         except StopIteration:
             self.val_iter = iter(self.val_loader)
-            inputs = self.val_iter.next()
+            #inputs = self.val_iter.next()
+            inputs = next(self.val_iter)
 
         with torch.no_grad():
             outputs, losses = self.process_batch(inputs)
@@ -334,6 +367,13 @@ class Trainer:
                 self.compute_depth_losses(inputs, outputs, losses)
 
             self.log("val", inputs, outputs, losses)
+            # Log to W&B
+            wandb.log({
+                "Val/total_loss": losses["loss"].item(),
+                "Val/reprojection_loss": losses["reproj_loss"].item() ,
+                "Val/smoothness_loss": losses["smooth_loss"].item()
+            }, step=self.step)
+
             del inputs, outputs, losses
 
         self.set_train()
@@ -455,7 +495,8 @@ class Trainer:
                 reprojection_losses *= mask
 
                 # add a loss pushing mask to 1 (using nn.BCELoss for stability)
-                weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).cuda())
+                #weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).cuda())
+                weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).to(self.device))
                 loss += weighting_loss.mean()
 
             if self.opt.avg_reprojection:
@@ -466,7 +507,8 @@ class Trainer:
             if not self.opt.disable_automasking:
                 # add random numbers to break ties
                 identity_reprojection_loss += torch.randn(
-                    identity_reprojection_loss.shape, device=self.device) * 0.00001
+                    identity_reprojection_loss.shape).to(self.device) * 0.00001 #.cuda() was replaced with to(self.device)
+                #    identity_reprojection_loss.shape, device=self.device) * 0.00001
 
                 combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
             else:
@@ -502,17 +544,20 @@ class Trainer:
         so is only used to give an indication of validation performance
         """
         depth_pred = outputs[("depth", 0, 0)]
+        _, _, h_gt, w_gt = inputs["depth_gt"].shape #Added
         depth_pred = torch.clamp(F.interpolate(
-            depth_pred, [375, 1242], mode="bilinear", align_corners=False), 1e-3, 80)
+            depth_pred, [h_gt, w_gt], mode="bilinear", align_corners=False), 1e-3, 80)
+        #    depth_pred, [375, 1242], mode="bilinear", align_corners=False), 1e-3, 80)
         depth_pred = depth_pred.detach()
 
         depth_gt = inputs["depth_gt"]
         mask = depth_gt > 0
 
-        # garg/eigen crop
-        crop_mask = torch.zeros_like(mask)
-        crop_mask[:, :, 153:371, 44:1197] = 1
-        mask = mask * crop_mask
+        if self.opt.dataset=="kitti":
+            # garg/eigen crop
+            crop_mask = torch.zeros_like(mask)
+            crop_mask[:, :, 153:371, 44:1197] = 1
+            mask = mask * crop_mask
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]
@@ -616,6 +661,7 @@ class Trainer:
             path = os.path.join(self.opt.load_weights_folder, "{}.pth".format(n))
             model_dict = self.models[n].state_dict()
             pretrained_dict = torch.load(path)
+            pretrained_dict = {k.replace("module.", ""): v for k, v in pretrained_dict.items()} #added
             pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
             model_dict.update(pretrained_dict)
             self.models[n].load_state_dict(model_dict)

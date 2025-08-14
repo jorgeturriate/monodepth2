@@ -14,9 +14,14 @@ file_dir = os.path.dirname(__file__)  # the directory that options.py resides in
 
 class MonodepthOptions:
     def __init__(self):
-        self.parser = argparse.ArgumentParser(description="Monodepthv2 options")
+        #self.parser = argparse.ArgumentParser(description="Monodepthv2 options")
+        self.parser = argparse.ArgumentParser(description="Monodepthv2 options", fromfile_prefix_chars='@')
 
         # PATHS
+        self.parser.add_argument("--eval_data_path",
+                                 type=str,
+                                 help="path to the evaluation data",
+                                 default='data/CS_RAW/')
         self.parser.add_argument("--data_path",
                                  type=str,
                                  help="path to the training data",
@@ -34,7 +39,7 @@ class MonodepthOptions:
         self.parser.add_argument("--split",
                                  type=str,
                                  help="which training split to use",
-                                 choices=["eigen_zhou", "eigen_full", "odom", "benchmark"],
+                                 choices=["eigen_zhou", "eigen_full", "odom", "benchmark", "midair"],
                                  default="eigen_zhou")
         self.parser.add_argument("--num_layers",
                                  type=int,
@@ -45,10 +50,11 @@ class MonodepthOptions:
                                  type=str,
                                  help="dataset to train on",
                                  default="kitti",
-                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test"])
+                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test","midair"])
         self.parser.add_argument("--png",
                                  help="if set, trains from raw KITTI png files (instead of jpgs)",
-                                 action="store_true")
+                                 action="store_true",
+                                 default=".png")
         self.parser.add_argument("--height",
                                  type=int,
                                  help="input image height",
@@ -65,11 +71,12 @@ class MonodepthOptions:
                                  nargs="+",
                                  type=int,
                                  help="scales used in the loss",
-                                 default=[0, 1, 2, 3])
+                                 default=[0])
+                                 #default=[0, 1, 2, 3])
         self.parser.add_argument("--min_depth",
                                  type=float,
                                  help="minimum depth",
-                                 default=0.1)
+                                 default=0.01)
         self.parser.add_argument("--max_depth",
                                  type=float,
                                  help="maximum depth",
@@ -131,6 +138,7 @@ class MonodepthOptions:
                                  type=str,
                                  help="normal or shared",
                                  default="separate_resnet",
+                                 #default="posecnn",
                                  choices=["posecnn", "separate_resnet", "shared"])
 
         # SYSTEM options
@@ -150,13 +158,18 @@ class MonodepthOptions:
                                  nargs="+",
                                  type=str,
                                  help="models to load",
-                                 default=["encoder", "depth", "pose_encoder", "pose"])
+                                 #default=["encoder", "depth", "pose_encoder", "pose"])
+                                 default=["encoder", "depth", "pose"])
 
         # LOGGING options
+        self.parser.add_argument('--ext', type=str,
+                                help='image extension to search for in folder', 
+                                default="png")
+
         self.parser.add_argument("--log_frequency",
                                  type=int,
                                  help="number of batches between each tensorboard log",
-                                 default=250)
+                                 default=10)
         self.parser.add_argument("--save_frequency",
                                  type=int,
                                  help="number of epochs between each save",
@@ -183,7 +196,7 @@ class MonodepthOptions:
                                  type=str,
                                  default="eigen",
                                  choices=[
-                                    "eigen", "eigen_benchmark", "benchmark", "odom_9", "odom_10"],
+                                    "eigen", "eigen_benchmark", "benchmark", "odom_9", "odom_10", "cityscapes"],
                                  help="which split to run eval on")
         self.parser.add_argument("--save_pred_disps",
                                  help="if set saves predicted disparities",
@@ -202,6 +215,25 @@ class MonodepthOptions:
                                  help="if set will perform the flipping post processing "
                                       "from the original monodepth paper",
                                  action="store_true")
+        
+        ## Curriculum learning settings
+        self.parser.add_argument("--a",
+                                 type=float,
+                                 help="Pacing function's scaling factor",
+                                 default=0.4)
+        self.parser.add_argument("--b",
+                                 type=float,
+                                 help="fraction of the full training data used initially",
+                                 default=0.2)
+        self.parser.add_argument("--p",
+                                 type=int,
+                                 help="used in quadratic pacing function to control the exponent",
+                                 default=1)
+        self.parser.add_argument("--pacing",
+                                 type=str,
+                                 help="used to define the pacing function",
+                                 default="linear",
+                                 choices=["linear", "quadratic","exponential","logarithmic","step"])
 
     def parse(self):
         self.options = self.parser.parse_args()
