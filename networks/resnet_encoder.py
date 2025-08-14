@@ -11,8 +11,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.models as models
-import torch.utils.model_zoo as model_zoo
+from torchvision.models import ResNet18_Weights, ResNet50_Weights
 
+# Make resnets mapping available everywhere
+resnets = {
+    18: models.resnet18,
+    34: models.resnet34,
+    50: models.resnet50,
+    101: models.resnet101,
+    152: models.resnet152
+}
 
 class ResNetMultiImageInput(models.ResNet):
     """Constructs a resnet model with varying number of input images.
@@ -51,11 +59,28 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
     block_type = {18: models.resnet.BasicBlock, 50: models.resnet.Bottleneck}[num_layers]
     model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images)
 
+    #if pretrained:
+    #    loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
+    #    loaded['conv1.weight'] = torch.cat(
+    #        [loaded['conv1.weight']] * num_input_images, 1) / num_input_images
+    #    model.load_state_dict(loaded)
     if pretrained:
-        loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
+        if num_layers == 18:
+            weights = ResNet18_Weights.DEFAULT
+        elif num_layers == 50:
+            weights = ResNet50_Weights.DEFAULT
+        else:
+            raise ValueError("Only 18 or 50 layer resnet supported")
+
+        base_model = resnets[num_layers](weights=weights)
+        loaded = base_model.state_dict()
+
+        # Adapt the first convolution layer for multi-image input
         loaded['conv1.weight'] = torch.cat(
             [loaded['conv1.weight']] * num_input_images, 1) / num_input_images
-        model.load_state_dict(loaded)
+
+        model.load_state_dict(loaded, strict=False)
+
     return model
 
 
@@ -67,19 +92,21 @@ class ResnetEncoder(nn.Module):
 
         self.num_ch_enc = np.array([64, 64, 128, 256, 512])
 
-        resnets = {18: models.resnet18,
-                   34: models.resnet34,
-                   50: models.resnet50,
-                   101: models.resnet101,
-                   152: models.resnet152}
-
         if num_layers not in resnets:
             raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
 
         if num_input_images > 1:
             self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images)
         else:
-            self.encoder = resnets[num_layers](pretrained)
+            if pretrained:
+                if num_layers == 18:
+                    self.encoder = resnets[num_layers](weights=ResNet18_Weights.DEFAULT)
+                elif num_layers == 50:
+                    self.encoder = resnets[num_layers](weights=ResNet50_Weights.DEFAULT)
+                else:
+                    self.encoder = resnets[num_layers](weights=None)
+            else:
+                self.encoder = resnets[num_layers](weights=None)
 
         if num_layers > 34:
             self.num_ch_enc[1:] *= 4
