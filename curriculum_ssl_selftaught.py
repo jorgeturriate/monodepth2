@@ -18,7 +18,7 @@ class CurriculumLearnerSelfSupervised:
         model_path: path to the checkpoint to use for scoring
         opt: options file to load the model
         """
-        self.models = {} if model=='SPIdepth' else ''
+        self.models = {} if model=='Monodepth' else ''
         self.dataloader = dataloader
         self.dataset= dataset
         self.device = device
