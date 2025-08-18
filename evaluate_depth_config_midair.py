@@ -129,24 +129,9 @@ def evaluate(opt):
                     input_color = torch.cat((input_color, torch.flip(input_color, [3])), 0)
 
                 output = depth_decoder(encoder(input_color))
-                if opt.log_attn:
-                    attn = output[("attn", 0)]
-                    writer = writers["vis"]
-                    for j in range(min(4, opt.batch_size)):  # write a maxmimum of four images
-                        writer.add_image(
-                            "color_{}/{}".format(0, j),
-                            input_color[j].data, step)
-                        writer.add_image(
-                            "disp_{}/{}".format(0, j),
-                            normalize_image(output[("disp", 0)][j].data), step)
-                        for k in range(100):
-                            # print(attn[j][k].unsqueeze(0).shape)
-                            writer.add_image(
-                                "attn_{}/{}".format(j, k),
-                                normalize_image(attn[j][k].unsqueeze(0).data), step)
 
-                pred_disp = output[("disp", 0)]
-                # pred_disp, _ = disp_to_depth(output[("disp", 0)], opt.min_depth, opt.max_depth)
+                #pred_disp = output[("disp", 0)]
+                pred_disp, _ = disp_to_depth(output[("disp", 0)], opt.min_depth, opt.max_depth)
                 pred_disp = pred_disp.cpu()[:, 0].numpy()
 
                 if opt.post_process:
