@@ -151,19 +151,29 @@ class BackprojectDepth(nn.Module):
         self.id_coords = nn.Parameter(torch.from_numpy(self.id_coords),
                                       requires_grad=False)
 
-        self.ones = nn.Parameter(torch.ones(self.batch_size, 1, self.height * self.width),
-                                 requires_grad=False)
+        #self.ones = nn.Parameter(torch.ones(self.batch_size, 1, self.height * self.width),
+        #                         requires_grad=False)
 
-        self.pix_coords = torch.unsqueeze(torch.stack(
-            [self.id_coords[0].view(-1), self.id_coords[1].view(-1)], 0), 0)
-        self.pix_coords = self.pix_coords.repeat(batch_size, 1, 1)
-        self.pix_coords = nn.Parameter(torch.cat([self.pix_coords, self.ones], 1),
-                                       requires_grad=False)
+        #self.pix_coords = torch.unsqueeze(torch.stack(
+        #    [self.id_coords[0].view(-1), self.id_coords[1].view(-1)], 0), 0)
+        #self.pix_coords = self.pix_coords.repeat(batch_size, 1, 1)
+        #self.pix_coords = nn.Parameter(torch.cat([self.pix_coords, self.ones], 1),
+        #                               requires_grad=False)
 
     def forward(self, depth, inv_K):
-        cam_points = torch.matmul(inv_K[:, :3, :3], self.pix_coords)
-        cam_points = depth.view(self.batch_size, 1, -1) * cam_points
-        cam_points = torch.cat([cam_points, self.ones], 1)
+
+        batch_size= depth.shape[0]
+
+        pix_coords = torch.unsqueeze(torch.stack(
+            [self.id_coords[0].view(-1), self.id_coords[1].view(-1)], 0), 0)
+        pix_coords = pix_coords.repeat(batch_size, 1, 1).to(depth.device)
+
+        ones = torch.ones(batch_size, 1, self.height * self.width).to(depth.device)
+        pix_coords = torch.cat([pix_coords, ones], 1)
+
+        cam_points = torch.matmul(inv_K[:, :3, :3], pix_coords)
+        cam_points = depth.view(batch_size, 1, -1) * cam_points
+        cam_points = torch.cat([cam_points, ones], 1)
 
         return cam_points
 
