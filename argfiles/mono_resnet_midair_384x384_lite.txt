@@ -1,5 +1,5 @@
 --data_path /home/jturriatellallire/datasets/MidAir
---log_dir /home/jturriatellallire/logsMonodepth/resnet_mono_midair_ep9
+--log_dir /home/jturriatellallire/logsMonodepth/resnet_mono_midair_ep18
 --model_name res_midair_mono
 --dataset midair 
 --eval_split cityscapes
@@ -8,12 +8,12 @@
 --width 384
 --batch_size 16
 --log_frequency 20
---num_epochs 9
+--num_epochs 18
 --scheduler_step_size 15
 --num_layers 18
 --min_depth 0.001
 --max_depth 80.0
---load_weights_folder /home/jturriatellallire/logsMonodepth/resnet_mono_midair_ep9/res_midair_mono/models/weights_8/
+--load_pt_folder /home/jturriatellallire/logsMonodepth/resnet_mono_midair_ep9/res_midair_mono/models/weights_17/
 --eval_mono
 --post_process
 --num_workers 0
