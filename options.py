@@ -237,6 +237,12 @@ class MonodepthOptions:
                                  help="used to define the pacing function",
                                  default="linear",
                                  choices=["linear", "quadratic","exponential","logarithmic","step"])
+        #Predict images
+        self.parser.add_argument('--image_path', type=str,
+                        help='path to a test image or folder of images', required=False)
+        self.parser.add_argument("--load_pretrained_model",
+                        help="if set, uses pretrained encoder and depth decoder for training",
+                        action="store_true")
 
     def parse(self):
         self.options = self.parser.parse_args()

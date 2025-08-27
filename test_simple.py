@@ -17,6 +17,7 @@ import matplotlib.cm as cm
 
 import torch
 from torchvision import transforms, datasets
+from options import MonodepthOptions
 
 import networks
 from layers import disp_to_depth
@@ -30,7 +31,7 @@ def parse_args():
 
     parser.add_argument('--image_path', type=str,
                         help='path to a test image or folder of images', required=True)
-    parser.add_argument('--model_name', type=str,
+    """parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
                             "mono_640x192",
@@ -41,16 +42,19 @@ def parse_args():
                             "mono+stereo_no_pt_640x192",
                             "mono_1024x320",
                             "stereo_1024x320",
-                            "mono+stereo_1024x320"])
+                            "mono+stereo_1024x320"])"""
     parser.add_argument('--ext', type=str,
                         help='image extension to search for in folder', default="jpg")
     parser.add_argument("--no_cuda",
                         help='if set, disables CUDA',
                         action='store_true')
-    parser.add_argument("--pred_metric_depth",
-                        help='if set, predicts metric depth instead of disparity. (This only '
-                             'makes sense for stereo-trained KITTI models).',
-                        action='store_true')
+    parser.add_argument("--load_pretrained_model",
+                        help="if set, uses pretrained encoder and depth decoder for training",
+                        action="store_true")
+    #parser.add_argument("--pred_metric_depth",
+    #                    help='if set, predicts metric depth instead of disparity. (This only '
+    #                         'makes sense for stereo-trained KITTI models).',
+    #                    action='store_true')
 
     return parser.parse_args()
 
@@ -58,28 +62,32 @@ def parse_args():
 def test_simple(args):
     """Function to predict for a single image or folder of images
     """
-    assert args.model_name is not None, \
-        "You must specify the --model_name parameter; see README.md for an example"
+    #assert args.model_name is not None, \
+    #    "You must specify the --model_name parameter; see README.md for an example"
 
     if torch.cuda.is_available() and not args.no_cuda:
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
-    if args.pred_metric_depth and "stereo" not in args.model_name:
-        print("Warning: The --pred_metric_depth flag only makes sense for stereo-trained KITTI "
-              "models. For mono-trained models, output depths will not in metric space.")
+    #if args.pred_metric_depth and "stereo" not in args.model_name:
+    #    print("Warning: The --pred_metric_depth flag only makes sense for stereo-trained KITTI "
+    #          "models. For mono-trained models, output depths will not in metric space.")
 
-    download_model_if_doesnt_exist(args.model_name)
-    model_path = os.path.join("models", args.model_name)
+    #download_model_if_doesnt_exist(args.model_name)
+
+    if args.load_pretrained_model:
+        model_path= args.load_pt_folder
+    
     print("-> Loading model from ", model_path)
     encoder_path = os.path.join(model_path, "encoder.pth")
     depth_decoder_path = os.path.join(model_path, "depth.pth")
 
     # LOADING PRETRAINED MODEL
     print("   Loading pretrained encoder")
-    encoder = networks.ResnetEncoder(18, False)
+    encoder = networks.ResnetEncoder(args.num_layers, False)
     loaded_dict_enc = torch.load(encoder_path, map_location=device)
+    loaded_dict_enc= {k.replace("module.", ""): v for k, v in loaded_dict_enc.items()}
 
     # extract the height and width of image that this model was trained with
     feed_height = loaded_dict_enc['height']
@@ -91,10 +99,12 @@ def test_simple(args):
 
     print("   Loading pretrained decoder")
     depth_decoder = networks.DepthDecoder(
-        num_ch_enc=encoder.num_ch_enc, scales=range(4))
+        num_ch_enc=encoder.num_ch_enc, scales=args.scales)
 
     loaded_dict = torch.load(depth_decoder_path, map_location=device)
-    depth_decoder.load_state_dict(loaded_dict)
+    loaded_dict= {k.replace("module.", ""): v for k, v in loaded_dict.items()}
+    filtered_dict_dec = {k: v for k, v in loaded_dict.items() if k in depth_decoder.state_dict()}
+    depth_decoder.load_state_dict(filtered_dict_dec)
 
     depth_decoder.to(device)
     depth_decoder.eval()
@@ -126,6 +136,7 @@ def test_simple(args):
             original_width, original_height = input_image.size
             input_image = input_image.resize((feed_width, feed_height), pil.LANCZOS)
             input_image = transforms.ToTensor()(input_image).unsqueeze(0)
+            print(input_image.shape)
 
             # PREDICTION
             input_image = input_image.to(device)
@@ -138,18 +149,27 @@ def test_simple(args):
 
             # Saving numpy file
             output_name = os.path.splitext(os.path.basename(image_path))[0]
-            scaled_disp, depth = disp_to_depth(disp, 0.1, 100)
-            if args.pred_metric_depth:
-                name_dest_npy = os.path.join(output_directory, "{}_depth.npy".format(output_name))
-                metric_depth = STEREO_SCALE_FACTOR * depth.cpu().numpy()
-                np.save(name_dest_npy, metric_depth)
-            else:
-                name_dest_npy = os.path.join(output_directory, "{}_disp.npy".format(output_name))
-                np.save(name_dest_npy, scaled_disp.cpu().numpy())
+            scaled_disp, depth = disp_to_depth(disp, 0.1, 80)
+            #if args.pred_metric_depth:
+            #    name_dest_npy = os.path.join(output_directory, "{}_depth.npy".format(output_name))
+            #    metric_depth = STEREO_SCALE_FACTOR * depth.cpu().numpy()
+            #    np.save(name_dest_npy, metric_depth)
+            #else:
+            name_dest_npy = os.path.join(output_directory, "{}_disp.npy".format(output_name))
+            np.save(name_dest_npy, scaled_disp.cpu().numpy())
 
             # Saving colormapped depth image
             disp_resized_np = disp_resized.squeeze().cpu().numpy()
             vmax = np.percentile(disp_resized_np, 95)
+
+            # Saving uint16 depth map
+            to_save_dir = os.path.join(output_directory, "uint16")
+            if not os.path.exists(to_save_dir):
+                os.makedirs(to_save_dir)
+            to_save_path = os.path.join(to_save_dir, "{}.png".format(output_name))
+            to_save = (disp_resized_np * 1000).astype('uint16')
+            pil.fromarray(to_save).save(to_save_path)
+
             normalizer = mpl.colors.Normalize(vmin=disp_resized_np.min(), vmax=vmax)
             mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
             colormapped_im = (mapper.to_rgba(disp_resized_np)[:, :, :3] * 255).astype(np.uint8)
@@ -165,7 +185,19 @@ def test_simple(args):
 
     print('-> Done!')
 
+def convert_arg_line_to_args(arg_line):
+    for arg in arg_line.split():
+        if not arg.strip():
+            continue
+        yield str(arg)
 
 if __name__ == '__main__':
-    args = parse_args()
-    test_simple(args)
+    options = MonodepthOptions()
+    options.parser.convert_arg_line_to_args = convert_arg_line_to_args
+    if sys.argv.__len__() == 2:
+        arg_filename_with_prefix = '@' + sys.argv[1]
+        opt = options.parser.parse_args([arg_filename_with_prefix])
+    else:
+        opt = options.parser.parse_args()
+
+    test_simple(opt)
