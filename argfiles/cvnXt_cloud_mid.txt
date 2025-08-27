@@ -2,8 +2,8 @@
 --min_depth 0.001
 --max_depth 80.0
 --load_pretrained_model
---load_pt_folder /content/drive/MyDrive/SPIdepth_Training/logs/mono_midair_ep9
+--load_pt_folder /content/drive/MyDrive/SPIdepth_Training/logs/mono_midair_ep18
 --height 384
 --width 384
---image_path /content/drive/MyDrive/SPIdepth_Training/images_mono_mid_ep9
+--image_path /content/drive/MyDrive/SPIdepth_Training/images_mono_mid_ep18
 --ext jpeg
