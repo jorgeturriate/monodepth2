@@ -1,4 +1,3 @@
---model_type cvnxt_L_
 --num_layers 18
 --min_depth 0.001
 --max_depth 80.0
