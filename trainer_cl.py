@@ -101,8 +101,8 @@ class TrainerCL:
         self.model_lr_scheduler = optim.lr_scheduler.StepLR(
             self.model_optimizer, self.opt.scheduler_step_size, 0.1)
 
-        if self.opt.load_weights_folder is not None:
-            self.load_model()
+        #if self.opt.load_weights_folder is not None:
+        #    self.load_model()
 
         print("Training model named:\n  ", self.opt.model_name)
         print("Models and tensorboard events files are saved to:\n  ", self.opt.log_dir) # default to ~/tmp/mdp/train
