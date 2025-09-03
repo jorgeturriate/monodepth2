@@ -13,7 +13,7 @@
 --num_layers 18
 --min_depth 0.001
 --max_depth 80.0
---load_weights_folder /home/jturriatellallire/logsMonodepth/full_self_mono_mid_linear_a08_ep18/res_midair_mono/models/weights_4199/
+--load_weights_folder /home/jturriatellallire/logsMonodepth/full_self_mono_mid_linear_a08_ep9_v2/res_midair_mono/models/weights_3997/
 --eval_mono
 --post_process
 --num_workers 0
