@@ -30,7 +30,7 @@ from collections import OrderedDict
 
 
 
-PROJECT = "Monodepth_MidAir_CL"
+PROJECT = "Monodepth_Kitti_CL"
 experiment_name="resnet18lite"
 
 class TrainerCL:
@@ -162,8 +162,8 @@ class TrainerCL:
 
         del train_dataset_cl
 
-        if not os.path.exists("/home/jturriatellallire/scores_mid_self.npy"): # /home/jturriatellallire/scores_mid_transfer.npy
-            self.curriculum_learner.score_and_save_losses("/home/jturriatellallire/scores_mid_self.npy")
+        if not os.path.exists("/home/jturriatellallire/scores_kitti_self.npy"): # /home/jturriatellallire/scores_mid_transfer.npy
+            self.curriculum_learner.score_and_save_losses("/home/jturriatellallire/scores_kitti_self.npy")
 
 
         self.writers = {}
@@ -237,7 +237,7 @@ class TrainerCL:
             total_steps=self.num_total_steps,
             batch_size=self.opt.batch_size,
             #score_path="/home/jturriatellallire/scores_mid_transfer.npy"
-            score_path="/home/jturriatellallire/scores_mid_self.npy"
+            score_path="/home/jturriatellallire/scores_kitti_self.npy"
         )
 
         selected_size = self.curriculum_learner.pacing(self.step, self.num_total_steps, len(self.train_loader_cl.dataset))

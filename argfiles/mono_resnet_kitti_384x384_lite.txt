@@ -1,0 +1,19 @@
+--data_path /home/jturriatellallire/datasets/MidAir
+--log_dir /home/jturriatellallire/logsMonodepth/resnet_mono_kitti_ep6
+--model_name res_kitti_mono
+--dataset kitti 
+--eval_split eigen
+--split eigen_zhou
+--height 192
+--width 640
+--batch_size 16
+--log_frequency 20
+--num_epochs 6
+--scheduler_step_size 15
+--num_layers 18
+--min_depth 0.001
+--max_depth 80.0
+--load_weights_folder /home/jturriatellallire/logsMonodepth/resnet_mono_kitti_ep6/res_midair_mono/models/weights_6/
+--eval_mono
+--post_process
+--num_workers 0

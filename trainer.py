@@ -32,7 +32,7 @@ import wandb #To log in wandb
 from collections import OrderedDict
 
 
-PROJECT = "Monodepth_Midair_full"
+PROJECT = "Monodepth_Kitti_full"
 experiment_name="resnet18lite"
 
 

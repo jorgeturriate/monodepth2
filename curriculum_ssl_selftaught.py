@@ -46,7 +46,7 @@ class CurriculumLearnerSelfSupervised:
             self.ssim.to(self.device)
         
         
-        if model=='Monodepth' and not os.path.exists("/home/jturriatellallire/scores_mid_self.npy"):
+        if model=='Monodepth' and not os.path.exists("/home/jturriatellallire/scores_kitti_self.npy"):
 
             self.models["encoder"] = networks.ResnetEncoder(self.opt.num_layers, False)
                                     
