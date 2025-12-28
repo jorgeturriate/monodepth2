@@ -14,6 +14,7 @@
 --min_depth 0.001
 --max_depth 80.0
 --load_weights_folder /home/jturriatellallire/logsMonodepth/resnet_mono_kitti_ep6/res_midair_mono/models/weights_6/
+--use_stereo
 --eval_mono
 --post_process
 --num_workers 0
