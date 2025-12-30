@@ -86,7 +86,7 @@ def evaluate(opt):
 
         dataset = datasets.KITTIRAWDataset(opt.data_path, filenames,
                                            encoder_dict['height'], encoder_dict['width'],
-                                           [0], 1, is_train=False)
+                                           [0], 1, is_train=False, img_ext="png")
         dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=opt.num_workers,
                                 pin_memory=True, drop_last=False)
 
