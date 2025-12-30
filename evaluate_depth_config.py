@@ -77,7 +77,7 @@ def evaluate(opt):
 
         print("-> Loading weights from {}".format(opt.load_weights_folder))
 
-        filenames = readlines(os.path.join(splits_dir, opt.eval_split, "test_files.txt"))
+        filenames = readlines(os.path.join(splits_dir, opt.split, "test_files.txt"))
         encoder_path = os.path.join(opt.load_weights_folder, "encoder.pth")
         decoder_path = os.path.join(opt.load_weights_folder, "depth.pth")
 
@@ -90,32 +90,18 @@ def evaluate(opt):
         dataloader = DataLoader(dataset, 1, shuffle=False, num_workers=opt.num_workers,
                                 pin_memory=True, drop_last=False)
 
-        if opt.backbone in ["resnet", "resnet_lite"]:
-            encoder = networks.ResnetEncoderDecoder(num_layers=opt.num_layers, num_features=opt.num_features, model_dim=opt.model_dim)
-        elif opt.backbone == "resnet18_lite":
-            encoder = networks.LiteResnetEncoderDecoder(model_dim=opt.model_dim)
-        elif opt.backbone == "eff_b5":
-            encoder = networks.BaseEncoder.build(num_features=opt.num_features, model_dim=opt.model_dim)
-        else: 
-            encoder = networks.Unet(pretrained=(not opt.load_pretrained_model), backbone=opt.backbone, in_channels=3, num_classes=opt.model_dim, decoder_channels=opt.dec_channels)
+        encoder = networks.ResnetEncoder(opt.num_layers, False)
+        depth_decoder = networks.DepthDecoder(encoder.num_ch_enc, opt.scales)       
 
-        if opt.backbone.endswith("_lite"):
-            depth_decoder = networks.Lite_Depth_Decoder_QueryTr(in_channels=opt.model_dim, patch_size=opt.patch_size, dim_out=opt.dim_out, embedding_dim=opt.model_dim, 
-                                                        query_nums=opt.query_nums, num_heads=4, min_val=opt.min_depth, max_val=opt.max_depth)
-        else:
-            depth_decoder = networks.Depth_Decoder_QueryTr(in_channels=opt.model_dim, patch_size=opt.patch_size, dim_out=opt.dim_out, embedding_dim=opt.model_dim, 
-                                                   query_nums=opt.query_nums, num_heads=4, min_val=opt.min_depth, max_val=opt.max_depth)
-
-        model_dict = encoder.state_dict()
+        model_encoder_dict = encoder.state_dict()
         # Remove 'module.' prefix from keys
         encoder_dict = {k.replace("module.", ""): v for k, v in encoder_dict.items()}
-        encoder.load_state_dict({k: v for k, v in encoder_dict.items() if k in model_dict})
+        encoder.load_state_dict({k: v for k, v in encoder_dict.items() if k in model_encoder_dict})
 
         decoder_dict= torch.load(decoder_path)
+        model_decoder_dict= depth_decoder.state_dict()
         decoder_dict = {k.replace("module.", ""): v for k, v in decoder_dict.items()}
-
-        #encoder.load_state_dict({k: v for k, v in encoder_dict.items() if k in model_dict})
-        depth_decoder.load_state_dict(decoder_dict)
+        depth_decoder.load_state_dict({k: v for k, v in decoder_dict.items() if k in model_decoder_dict})
 
         encoder.cuda()
         encoder = torch.nn.DataParallel(encoder)
@@ -142,24 +128,9 @@ def evaluate(opt):
                     input_color = torch.cat((input_color, torch.flip(input_color, [3])), 0)
 
                 output = depth_decoder(encoder(input_color))
-                if opt.log_attn:
-                    attn = output[("attn", 0)]
-                    writer = writers["vis"]
-                    for j in range(min(4, opt.batch_size)):  # write a maxmimum of four images
-                        writer.add_image(
-                            "color_{}/{}".format(0, j),
-                            input_color[j].data, step)
-                        writer.add_image(
-                            "disp_{}/{}".format(0, j),
-                            normalize_image(output[("disp", 0)][j].data), step)
-                        for k in range(100):
-                            # print(attn[j][k].unsqueeze(0).shape)
-                            writer.add_image(
-                                "attn_{}/{}".format(j, k),
-                                normalize_image(attn[j][k].unsqueeze(0).data), step)
-
-                pred_disp = output[("disp", 0)]
-                # pred_disp, _ = disp_to_depth(output[("disp", 0)], opt.min_depth, opt.max_depth)
+            
+                #pred_disp = output[("disp", 0)]
+                pred_disp, _ = disp_to_depth(output[("disp", 0)], opt.min_depth, opt.max_depth)
                 pred_disp = pred_disp.cpu()[:, 0].numpy()
 
                 if opt.post_process:
@@ -197,22 +168,6 @@ def evaluate(opt):
         print("-> Evaluation disabled. Done.")
         quit()
 
-    elif opt.eval_split == 'benchmark':
-        save_dir = os.path.join(opt.load_weights_folder, "benchmark_predictions")
-        print("-> Saving out benchmark predictions to {}".format(save_dir))
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        for idx in range(len(pred_disps)):
-            disp_resized = cv2.resize(pred_disps[idx], (1216, 352))
-            depth = STEREO_SCALE_FACTOR / disp_resized
-            depth = np.clip(depth, 0, 80)
-            depth = np.uint16(depth * 256)
-            save_path = os.path.join(save_dir, "{:010d}.png".format(idx))
-            cv2.imwrite(save_path, depth)
-
-        print("-> No ground truth is available for the KITTI benchmark, so not evaluating. Done.")
-        quit()
     elif opt.eval_split == 'eigen':
         save_dir = os.path.join(opt.load_weights_folder, "eigen_predictions")
         print("-> Saving out eigen predictions to {}".format(save_dir))
@@ -226,7 +181,6 @@ def evaluate(opt):
             depth = np.uint16(depth * 256)
             save_path = os.path.join(save_dir, "{:010d}.png".format(idx))
             cv2.imwrite(save_path, depth)
-
         print("-> Saving predictions as images")
 
     gt_path = os.path.join(splits_dir, opt.eval_split, "gt_depths.npz")
